@@ -1,0 +1,115 @@
+import random
+import json
+import sys
+
+def load_file(filename):
+    try:
+        with open(filename, 'r') as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        data = []
+    return data
+
+def save_file(filename, updated_past_pairings):
+    # Convert sets of frozensets to lists of lists for JSON compatibility
+    past_pairings = [list(pair) for pair in updated_past_pairings]
+    with open(filename, 'w') as file:
+        json.dump(past_pairings, file)
+
+def generate_sister_dates(past_pairings=set(),roster1=None, roster2=None):
+    """
+        Parameters:
+            past_pairings (set): a set of the past sister date pairings.
+            roster1 (list): a list of the first roster (actives or candidates).
+            roster2 (list): a list of the second roster -- used for big-little pairings since you need two different rosters.
+
+        Returns pairs (a list of unique pairings) and historical_set (updated set of all past pairings).
+    """
+    # TO-DO: update to allow pairings of 3 people if len(roster1) is odd 
+    # TO-DO: if roster2 != None then pairing big-little so use both sets to valid big/little pairings
+    pairs = []
+    paired = set()
+    
+    # Create a set of historical pairings from past_pairings for quick look-up
+    historical_set = set(frozenset(pair) for pair in past_pairings)
+
+    while len(paired) < len(roster1):
+        name = random.choice(roster1)
+
+        if name not in paired:
+            paired.add(name)
+            remaining_names = [n for n in roster1 if n != name and n not in paired]
+
+            # Filter the remaining names based on past pairings
+            remaining_names = [n for n in remaining_names if frozenset([name, n]) not in historical_set]
+
+            if not remaining_names:
+                # If no valid partners left, reset and try again
+                paired.clear()
+                historical_set.clear()
+                pairs.clear()
+                continue
+
+            partner = random.choice(remaining_names)
+
+            # Sort the pair so that (A, B) is the same as (B, A) -- eliminate dupes
+            pair = tuple(sorted([name, partner]))
+            pairs.append(pair)
+            paired.add(partner)
+            historical_set.add(frozenset(pair))
+
+    return pairs, historical_set
+
+# File to store historical pairings
+historical_filename = "historical_pairings.json"
+
+if __name__ == "__main__":
+    # Load historical pairings from the file
+    past_pairings_file = load_file(historical_filename)
+
+    """ Example file call:
+        python sister_date_pairings.py <generate or remove> 
+          <(generate) pairing type: actives, candidates, or big-little OR (remove) list to remove from: actives or candidates>
+            <(generate) list to fetch names from: actives or candidates OR (remove) name of member to remove from list above> 
+               <(generate) if pairing big-little, need a second list to fetch names from: actives or candidates>
+    """
+    
+    action = sys.argv[1]    # generate or remove
+    
+    if action == "generate":
+        pairing_type = sys.argv[2]  # among actives, candidates, or for big-little
+        # Fetch the appropriate list of past_pairings
+        pairing_list = past_pairings_file[pairing_type]
+        pairing_set = set(frozenset(pair) for pair in pairing_list)
+        
+        roster1_name = sys.argv[3]  # membership type or name of member to remove from
+        # Fetch the rosters
+        roster1 = load_file(roster1_name)
+
+        # Only need second arg (another membership type) if doing big-little pairing
+        try:
+            roster2_name = sys.argv[4]
+            roster2 = load_file(roster2_name)
+        except IndexError:
+            roster2_name = None
+
+        unique_pairs, updated_past_pairings = generate_sister_dates(pairing_set, roster1, roster2)
+
+        save_file(past_pairings_file, updated_past_pairings)
+
+    elif action == "remove":
+        roster = sys.argv[2]  # list to remove member from: actives or candidates
+        member_name = sys.argv[3]  # name of member to remove
+
+        # Fetch the appropriate lists of past_pairings
+        roster_pairing_list = past_pairings_file[roster]
+        big_little_pairing_list = past_pairings_file["big-little"]
+
+        # Remove member_name from roster_pairing_list
+        # Remove member_name from big_little_pairing_list if they are in there
+        # Remove member_name from roster
+
+
+    # Print if curious
+    for pair in unique_pairs:
+        print(f"{pair[0]} and {pair[1]}")
